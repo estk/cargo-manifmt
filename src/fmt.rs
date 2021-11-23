@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::toml_edit::{Document, Item, Table, Value};
+use toml_edit::{Document, Item, Table, Value};
 
 /// The config file for formatting toml after sorting.
 ///
@@ -129,17 +129,19 @@ impl FromStr for Config {
 fn fmt_value(value: &mut Value, config: &Config) {
     match value {
         Value::Array(arr) => {
-            arr.trailing_comma |= config.always_trailing_comma;
-            arr.fmt(config.compact_arrays, config.multiline_trailing_comma);
+            // TODO if multi line trailing comma and compact array
+            arr.set_trailing_comma(config.always_trailing_comma);
+            arr.fmt();
         }
         Value::InlineTable(table) => {
-            table.fmt(config.compact_inline_tables);
+            table.fmt();
         }
         // Since the above variants have fmt methods we can only ever
         // get here from a headed table (`[header] key = val`)
         val => {
-            if config.space_around_eq && val.decor().prefix().is_empty() {
-                val.decor_mut().prefix.push(' ');
+            if config.space_around_eq && val.decor().prefix().map_or(false, str::is_empty)
+            {
+                val.decor_mut().set_prefix(" ");
             }
         }
     }
@@ -147,45 +149,60 @@ fn fmt_value(value: &mut Value, config: &Config) {
 
 fn fmt_table(table: &mut Table, config: &Config) {
     // Checks the header decor for blank lines
-    let blank_header_lines =
-        table.header_decor().prefix().lines().filter(|l| !l.starts_with('#')).count();
+    let blank_header_lines = table
+        .decor()
+        .prefix()
+        .unwrap_or("")
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .count();
     if config.allowed_blank_lines < blank_header_lines {
-        let dec = table.header_decor_mut();
-        dec.prefix = dec.prefix().replacen(
+        let dec = table.decor_mut();
+        dec.set_prefix(dec.prefix().unwrap_or("").replacen(
             "\n",
             "",
             blank_header_lines - config.allowed_blank_lines,
-        );
+        ));
     }
 
-    for (_, item) in table.iter_mut() {
-        let blank_lines =
-            item.decor().prefix().lines().filter(|l| !l.starts_with('#')).count();
+    let mut tab_clone = table.clone();
+    for (key, item) in table.iter() {
+        let blank_lines = tab_clone.key_decor(key).map_or(0, |d| {
+            d.prefix().unwrap_or("").lines().filter(|l| !l.starts_with('#')).count()
+        });
 
         // Check each item in the table for blank lines
         if config.key_value_newlines {
             if config.allowed_blank_lines < blank_lines {
-                let dec = item.decor_mut();
-                dec.prefix = dec.prefix().replacen(
-                    "\n",
-                    "",
-                    blank_lines - config.allowed_blank_lines,
-                );
+                if let Some(dec) = tab_clone.key_decor_mut(key) {
+                    dec.set_prefix(dec.prefix().unwrap_or("").replacen(
+                        "\n",
+                        "",
+                        blank_lines - config.allowed_blank_lines,
+                    ));
+                }
             }
         } else {
-            let dec = item.decor_mut();
-            dec.prefix = if dec.prefix.contains('#') {
-                dec.prefix().replacen("\n", "", blank_lines)
-            } else {
-                "".to_string()
-            };
+            if let Some(dec) = tab_clone.key_decor_mut(key) {
+                dec.set_prefix(if dec.prefix().map_or(false, |d| d.contains('#')) {
+                    dec.prefix().unwrap_or("").replacen("\n", "", blank_lines)
+                } else {
+                    "".to_string()
+                });
+            }
         }
 
-        if config.space_around_eq && item.decor().suffix.is_empty() {
-            item.decor_mut().suffix.push(' ');
+        if config.space_around_eq
+            && tab_clone
+                .key_decor(key)
+                .map_or(false, |d| d.suffix().map_or(false, str::is_empty))
+        {
+            if let Some(dec) = tab_clone.key_decor_mut(key) {
+                dec.set_suffix(format!("{}{}", dec.suffix().unwrap_or(""), ' '));
+            }
         }
 
-        match item.value_mut() {
+        match tab_clone.get_mut(key).unwrap() {
             Item::Table(table) => {
                 // stuff
                 fmt_table(table, config);
@@ -197,12 +214,14 @@ fn fmt_table(table: &mut Table, config: &Config) {
             Item::None => {}
         }
     }
+    // FIXME: ehh this is just to make this work
+    *table = tab_clone;
 }
 
 /// Formats a toml `Document` according to `tomlfmt.toml`.
 pub fn fmt_toml(toml: &mut Document, config: &Config) {
     for (_key, item) in toml.as_table_mut().iter_mut() {
-        match item.value_mut() {
+        match item {
             Item::ArrayOfTables(table) => {
                 for tab in table.iter_mut() {
                     fmt_table(tab, config);
@@ -221,8 +240,8 @@ pub fn fmt_toml(toml: &mut Document, config: &Config) {
     // TODO:
     // This is TERRIBLE!! Convert the Document to a string only to check it ends with a
     // newline
-    if config.trailing_newline && !toml.to_string_in_original_order().ends_with('\n') {
-        toml.trailing.push('\n');
+    if config.trailing_newline && !toml.to_string().ends_with('\n') {
+        toml.decor_mut().set_suffix("\n");
     }
 }
 
@@ -237,8 +256,8 @@ mod test {
         let input = fs::read_to_string("examp/ruma.toml").unwrap();
         let mut toml = input.parse::<Document>().unwrap();
         fmt_toml(&mut toml, &Config::new());
-        assert_ne!(input, toml.to_string_in_original_order());
-        // println!("{}", toml.to_string_in_original_order());
+        assert_ne!(input, toml.to_string());
+        // println!("{}", toml.to_string());
     }
 
     #[test]
@@ -246,7 +265,7 @@ mod test {
         let input = fs::read_to_string("examp/right.toml").unwrap();
         let mut toml = input.parse::<Document>().unwrap();
         fmt_toml(&mut toml, &Config::new());
-        assert_eq!(input, toml.to_string_in_original_order());
+        assert_eq!(input, toml.to_string());
     }
 
     #[test]
@@ -254,8 +273,8 @@ mod test {
         let input = fs::read_to_string("examp/clippy.toml").unwrap();
         let mut toml = input.parse::<Document>().unwrap();
         fmt_toml(&mut toml, &Config::new());
-        assert_ne!(input, toml.to_string_in_original_order());
-        // println!("{}", toml.to_string_in_original_order());
+        assert_ne!(input, toml.to_string());
+        // println!("{}", toml.to_string());
     }
 
     #[test]
@@ -263,7 +282,7 @@ mod test {
         let input = fs::read_to_string("examp/trailing.toml").unwrap();
         let mut toml = input.parse::<Document>().unwrap();
         fmt_toml(&mut toml, &Config::new());
-        assert_ne!(input, toml.to_string_in_original_order());
-        // println!("{}", toml.to_string_in_original_order());
+        assert_ne!(input, toml.to_string());
+        // println!("{}", toml.to_string());
     }
 }

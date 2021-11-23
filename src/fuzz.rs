@@ -2,7 +2,6 @@ use afl::fuzz;
 
 mod fmt;
 mod sort;
-mod toml_edit;
 
 use fmt::Config;
 use toml_edit::Document;
