@@ -195,7 +195,11 @@ fn _main() -> IoResult<()> {
     let (is_posible_workspace, mut filtered_matches) =
         matches.get_many::<String>("cwd").map_or((true, vec![dir.clone()]), |s| {
             let args = s.filter(|it| *it != "sort").map(Into::into).collect::<Vec<_>>();
-            if args.is_empty() { (true, vec![dir]) } else { (args.len() == 1, args) }
+            if args.is_empty() {
+                (true, vec![dir])
+            } else {
+                (args.len() == 1, args)
+            }
         });
 
     if flag_set("workspace", &matches) && is_posible_workspace {
@@ -212,14 +216,16 @@ fn _main() -> IoResult<()> {
         let workspace = &toml["workspace"];
         if let Item::Table(ws) = workspace {
             // The workspace excludes, used to filter members by
-            let excludes: Vec<&str> = ws["exclude"]
-                .as_array()
+            let excludes: Vec<&str> = ws
+                .get("exclude")
+                .and_then(Item::as_array)
                 .into_iter()
                 .flat_map(|a| a.iter())
                 .flat_map(|s| s.as_str())
                 .collect();
-            for member in ws["members"]
-                .as_array()
+            for member in ws
+                .get("members")
+                .and_then(Item::as_array)
                 .into_iter()
                 .flat_map(|arr| arr.iter())
                 .flat_map(|s| s.as_str())
@@ -285,7 +291,11 @@ fn _main() -> IoResult<()> {
         }
     }
 
-    if flag { std::process::exit(0) } else { std::process::exit(1) }
+    if flag {
+        std::process::exit(0)
+    } else {
+        std::process::exit(1)
+    }
 }
 
 fn main() {

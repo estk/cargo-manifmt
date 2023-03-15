@@ -16,7 +16,11 @@ pub struct Matcher<'a> {
 
 pub const MATCHER: Matcher<'_> = Matcher {
     heading: &["dependencies", "dev-dependencies", "build-dependencies"],
-    heading_key: &[("workspace", "members"), ("workspace", "exclude")],
+    heading_key: &[
+        ("workspace", "members"),
+        ("workspace", "exclude"),
+        ("workspace", "dependencies"),
+    ],
 };
 
 /// A state machine to track collection of headings.
@@ -142,6 +146,7 @@ pub fn sort_toml(
     let mut ordering = ordering.to_owned();
     let mut toml = input.parse::<Document>().unwrap();
     // This takes care of `[workspace] members = [...]`
+    // and the [workspace.dependencies] table
     for (heading, key) in matcher.heading_key {
         // Since this `&mut toml[&heading]` is like
         // `SomeMap.entry(key).or_insert(Item::None)` we only want to do it if we
@@ -151,6 +156,8 @@ pub fn sort_toml(
                 if table.contains_key(key) {
                     if let Item::Value(Value::Array(arr)) = &mut table[key] {
                         sort_array(arr);
+                    } else if let Item::Table(tab) = &mut table[key] {
+                        tab.sort_values();
                     }
                 }
             }
@@ -294,7 +301,11 @@ mod test {
 
     const MATCHER: Matcher<'_> = Matcher {
         heading: &["dependencies", "dev-dependencies", "build-dependencies"],
-        heading_key: &[("workspace", "members"), ("workspace", "exclude")],
+        heading_key: &[
+            ("workspace", "members"),
+            ("workspace", "exclude"),
+            ("workspace", "dependencies"),
+        ],
     };
 
     #[test]
@@ -367,5 +378,12 @@ mod test {
             ],
         );
         assert_ne!(input, sorted.to_string());
+    }
+
+    #[test]
+    fn workspace_dependencies_check() {
+        let input = fs::read_to_string("examp/workspace_dep.toml").unwrap();
+        let sorted = super::sort_toml(&input, MATCHER, false, &[]);
+        assert_ne!(input, sorted.to_string_in_original_order());
     }
 }
