@@ -13,5 +13,6 @@ table_order = [
     "dependencies",
     "build-dependencies",
     "dev-dependencies",
-    "workspace"
+    "workspace",
 ]
+workspace_dependency_grouping = "top"

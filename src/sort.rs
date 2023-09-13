@@ -1,8 +1,6 @@
-use std::{cmp::Ordering, collections::BTreeMap, iter::FromIterator};
+use std::{cmp::Ordering, collections::BTreeMap, fmt::Display, iter::FromIterator};
 
 use toml_edit::{Array, Document, Item, Table, Value};
-
-use crate::fmt::count_blank_lines;
 
 /// Each `Matcher` field when matched to a heading or key token
 /// will be matched with `.contains()`.
@@ -98,10 +96,14 @@ fn sort_by_group(table: &mut Table) {
         }
     }
 
-    for (_, mut group) in groups {
-        group.sort_by(|a, b| a.0.cmp(b.0));
+    for (i, mut group) in groups {
+        group.sort_by(|&(ka, a), &(kb, b)| {
+            let res = cmp_deps(ka, a, kb, b);
+            res
+        });
 
         for (k, v) in group {
+            println!("{i}: ({k}, ...)");
             table.insert(k, v.clone());
 
             // Transfer key decor from cloned table to modified table. Apparently
@@ -135,6 +137,44 @@ fn sort_array(arr: &mut Array) {
         *arr = Array::from_iter(arr_copy);
     }
 }
+/// check if the dependency value indicates that it is a workspace dep
+fn is_ws_dep(item: &Item) -> bool {
+    item.as_table_like()
+        .and_then(|t| t.get("workspace"))
+        .and_then(|ws| ws.as_bool())
+        .unwrap_or_default()
+}
+fn is_onekey(item: &Item) -> bool {
+    item.as_table_like().map(|t| t.len() == 1).unwrap_or_default()
+}
+fn cmp_onekey(a: &Item, b: &Item) -> Option<Ordering> {
+    match (is_onekey(a), is_onekey(b)) {
+        (true, true) | (false, false) => None,
+        (aa, bb) => Some(aa.cmp(&bb)),
+    }
+}
+fn is_git(item: &Item) -> bool {
+    item.as_table_like().map(|t| t.contains_key("git")).unwrap_or_default()
+}
+fn is_path(item: &Item) -> bool {
+    item.as_table_like().map(|t| t.contains_key("path")).unwrap_or_default()
+}
+// this needs to be rewritten with groupby
+fn cmp_deps<K: Display + Ord + ?Sized>(ka: &K, a: &Item, kb: &K, b: &Item) -> Ordering {
+    match (is_path(a), is_path(b)) {
+        (aa, bb) if aa != bb => return aa.cmp(&bb),
+        _ => {}
+    }
+    match (is_git(a), is_git(b)) {
+        (aa, bb) if aa != bb => return aa.cmp(&bb),
+        _ => {}
+    }
+    match (is_ws_dep(a), is_ws_dep(b)) {
+        (true, true) => cmp_onekey(a, b).unwrap_or_else(|| ka.cmp(kb)),
+        (false, false) => ka.cmp(kb),
+        (aa, bb) => aa.cmp(&bb),
+    }
+}
 
 /// Returns a sorted toml `Document`.
 pub fn sort_toml(
@@ -157,7 +197,8 @@ pub fn sort_toml(
                     if let Item::Value(Value::Array(arr)) = &mut table[key] {
                         sort_array(arr);
                     } else if let Item::Table(tab) = &mut table[key] {
-                        tab.sort_values();
+                        // tab.sort_values();
+                        tab.sort_values_by(cmp_deps);
                     }
                 }
             }
@@ -193,7 +234,7 @@ pub fn sort_toml(
                 if group {
                     sort_by_group(table);
                 } else {
-                    table.sort_values();
+                    table.sort_values_by(cmp_deps);
                 }
             }
             Item::None => continue,
@@ -293,6 +334,16 @@ fn walk_tables_set_position(table: &mut Table, idx: &mut usize) {
     }
 }
 
+pub(crate) fn count_blank_lines(decor: &toml_edit::Decor) -> usize {
+    decor
+        .prefix()
+        .map_or(Some(""), |s| s.as_str())
+        .unwrap_or("")
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .count()
+}
+
 #[cfg(test)]
 mod test {
     use std::fs;
@@ -321,7 +372,7 @@ mod test {
         let input = fs::read_to_string("examp/ruma.toml").unwrap();
         let sorted = super::sort_toml(&input, MATCHER, true, &[]);
         assert_ne!(input, sorted.to_string());
-        // println!("{}", sorted.to_string_in_original_order());
+        // println!("{}", sorted.to_string());
     }
 
     #[test]
@@ -332,7 +383,7 @@ mod test {
         assert_eq!(input.replace("\r\n", "\n"), sorted.to_string().replace("\r\n", "\n"));
         #[cfg(not(target_os = "windows"))]
         assert_eq!(input, sorted.to_string());
-        // println!("{}", sorted.to_string_in_original_order());
+        // println!("{}", sorted.to_string());
     }
 
     #[test]
@@ -384,6 +435,7 @@ mod test {
     fn workspace_dependencies_check() {
         let input = fs::read_to_string("examp/workspace_dep.toml").unwrap();
         let sorted = super::sort_toml(&input, MATCHER, false, &[]);
-        assert_ne!(input, sorted.to_string_in_original_order());
+        assert_ne!(input, sorted.to_string());
+        println!("{}", sorted.to_string());
     }
 }

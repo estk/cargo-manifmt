@@ -1,3 +1,10 @@
 [workspace.dependencies]
 foo = "*"
 bar = "*"
+baz.version = "1.0"
+zulu.workspace = true
+alpha.workspace = false
+bas.workspace = false
+fooer.git = "https://foobar.com/fooer.git"
+charles.path = "./charles"
+bast = { workspace = true }
