@@ -9,6 +9,8 @@ allowed_blank_lines = 2
 crlf = false
 table_order = [
     "package",
+    "lib",
+    "bin",
     "features",
     "dependencies",
     "build-dependencies",

@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::BTreeMap, fmt::Display, iter::FromIterator};
+use std::{cmp::Ordering, collections::BTreeMap, iter::FromIterator};
 
 use toml_edit::{Array, Document, Item, Table, Value};
 
@@ -98,14 +98,10 @@ fn sort_by_group(table: &mut Table) {
         }
     }
 
-    for (i, mut group) in groups {
-        group.sort_by(|&(ka, a), &(kb, b)| {
-            let res = cmp_deps(ka, a, kb, b);
-            res
-        });
+    for (_, mut group) in groups {
+        group.sort_by_key(|x| x.0);
 
         for (k, v) in group {
-            println!("{i}: ({k}, ...)");
             table.insert(k, v.clone());
 
             // Transfer key decor from cloned table to modified table. Apparently
@@ -149,33 +145,11 @@ fn is_ws_dep(item: &Item) -> bool {
 fn is_onekey(item: &Item) -> bool {
     item.as_table_like().map(|t| t.len() == 1).unwrap_or_default()
 }
-fn cmp_onekey(a: &Item, b: &Item) -> Option<Ordering> {
-    match (is_onekey(a), is_onekey(b)) {
-        (true, true) | (false, false) => None,
-        (aa, bb) => Some(aa.cmp(&bb)),
-    }
-}
 fn is_git(item: &Item) -> bool {
     item.as_table_like().map(|t| t.contains_key("git")).unwrap_or_default()
 }
 fn is_path(item: &Item) -> bool {
     item.as_table_like().map(|t| t.contains_key("path")).unwrap_or_default()
-}
-// this needs to be rewritten with groupby
-fn cmp_deps<K: Display + Ord + ?Sized>(ka: &K, a: &Item, kb: &K, b: &Item) -> Ordering {
-    match (is_path(a), is_path(b)) {
-        (aa, bb) if aa != bb => return aa.cmp(&bb),
-        _ => {}
-    }
-    match (is_git(a), is_git(b)) {
-        (aa, bb) if aa != bb => return aa.cmp(&bb),
-        _ => {}
-    }
-    match (is_ws_dep(a), is_ws_dep(b)) {
-        (true, true) => cmp_onekey(a, b).unwrap_or_else(|| ka.cmp(kb)),
-        (false, false) => ka.cmp(kb),
-        (aa, bb) => aa.cmp(&bb),
-    }
 }
 
 /// Returns a sorted toml `Document`.
@@ -187,22 +161,28 @@ pub fn sort_toml(
 ) -> Document {
     let mut ordering = ordering.to_owned();
     let mut toml = input.parse::<Document>().unwrap();
+
     // This takes care of `[workspace] members = [...]`
     // and the [workspace.dependencies] table
     for (heading, key) in matcher.heading_key {
         // Since this `&mut toml[&heading]` is like
         // `SomeMap.entry(key).or_insert(Item::None)` we only want to do it if we
         // know the heading is there already
-        if toml.as_table().contains_key(heading) {
-            if let Item::Table(table) = &mut toml[heading] {
-                if table.contains_key(key) {
-                    if let Item::Value(Value::Array(arr)) = &mut table[key] {
-                        sort_array(arr);
-                    } else if let Item::Table(tab) = &mut table[key] {
-                        // tab.sort_values();
-                        tab.sort_values_by(cmp_deps);
+        if let Some((_k, Item::Table(table))) =
+            toml.as_table_mut().get_key_value_mut(heading)
+        {
+            match table.get_key_value_mut(key) {
+                Some((_, Item::Value(Value::Array(arr)))) => {
+                    sort_array(arr);
+                }
+                Some((_, Item::Table(tab))) => {
+                    if key.ends_with("dependencies") {
+                        sort_deps(tab);
+                    } else {
+                        tab.sort_values();
                     }
                 }
+                _ => {}
             }
         }
     }
@@ -233,10 +213,12 @@ pub fn sort_toml(
 
                 gather_headings(table, headings, 1);
                 headings.sort();
-                if group {
+                if head.to_string().ends_with("dependencies") {
+                    sort_deps(table);
+                } else if group {
                     sort_by_group(table);
                 } else {
-                    table.sort_values_by(cmp_deps);
+                    table.sort_values()
                 }
             }
             Item::None => continue,
@@ -344,4 +326,65 @@ pub(crate) fn count_blank_lines(decor: &toml_edit::Decor) -> usize {
         .lines()
         .filter(|l| !l.starts_with('#'))
         .count()
+}
+
+fn sort_deps(table: &mut Table) {
+    use itertools::Itertools;
+
+    let gb = table.iter().group_by(DepKind::from_entry);
+    let sorted_groups = gb
+        .into_iter()
+        .into_group_map()
+        .into_iter()
+        .sorted_by(|(k1, _g1), (k2, _g2)| k1.cmp(k2));
+
+    let mut res = vec![];
+    for (_, g) in sorted_groups {
+        let mut full_group = vec![];
+        for gg in g {
+            full_group.extend(gg.into_iter().map(|x| x.0.to_string()))
+        }
+        full_group.sort();
+        res.append(&mut full_group);
+    }
+    drop(gb);
+
+    for k in res {
+        let decor = table.key_decor(&k).unwrap().to_owned();
+        let (k, v) = table.remove_entry(&k).unwrap();
+        table.insert(&k, v);
+        let d = table.key_decor_mut(&k).unwrap();
+        if let Some(x) = decor.prefix() {
+            d.set_prefix(x.to_owned())
+        }
+        if let Some(x) = decor.suffix() {
+            d.set_suffix(x.to_owned())
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, PartialOrd, Ord, Hash)]
+enum DepKind {
+    Path,
+    Git,
+    Normal,
+    Ws,
+    WsOneKey,
+}
+impl DepKind {
+    fn from_entry((_, i): &(&str, &Item)) -> Self {
+        if is_git(i) {
+            Self::Git
+        } else if is_path(i) {
+            Self::Path
+        } else if is_ws_dep(i) {
+            if is_onekey(i) {
+                Self::WsOneKey
+            } else {
+                Self::Ws
+            }
+        } else {
+            DepKind::Normal
+        }
+    }
 }

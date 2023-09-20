@@ -112,7 +112,6 @@ impl Config {
     // Used in testing and fuzzing
     #[allow(dead_code)]
     pub(crate) fn new() -> Self {
-        let me = toml::from_str("").unwrap();
-        me
+        toml::from_str("").unwrap()
     }
 }

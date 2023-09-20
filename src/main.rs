@@ -53,10 +53,10 @@ fn run() -> IoResult<()> {
         env::current_dir().map_err(|e| format!("no current directory found: {}", e))?;
     let cwd_str = cwd.to_string_lossy();
 
-    let cf = fs::File::open(cwd.join("tomlfmt.toml"))
+    let config_file = fs::File::open(cwd.join("tomlfmt.toml"))
         .or_else(|_| fs::File::open(".tomlfmt.toml"));
 
-    let mut config = if let Ok(mut f) = cf {
+    let mut config = if let Ok(mut f) = config_file {
         let mut s = String::new();
         f.read_to_string(&mut s)?;
         toml::from_str(&s)?
@@ -65,7 +65,7 @@ fn run() -> IoResult<()> {
     };
 
     if let Some(ordering) = &args.order {
-        config.table_order = ordering.into_iter().map(|s| s.to_string()).collect();
+        config.table_order = ordering.iter().map(|s| s.to_string()).collect();
     }
     let member_paths = find_members(cwd_str.to_string())?;
     let members_sorted: IoResult<Vec<bool>> =
@@ -91,7 +91,9 @@ fn find_members(dir: String) -> IoResult<Vec<String>> {
         .map_err(|_| format!("no file found at: {}", path.display()))?;
 
     let toml = raw_toml.parse::<Document>()?;
-    let workspace = &toml["workspace"];
+    let workspace = toml
+        .get("workspace")
+        .ok_or("Unable to get workspace root. Are you running from the workspace dir?")?;
     if let Item::Table(ws) = workspace {
         // The workspace excludes, used to filter members by
         let excludes: Vec<&str> = ws
@@ -151,9 +153,9 @@ fn check_toml(path: &str, args: &Args, config: &Config) -> IoResult<bool> {
         path.push("Cargo.toml");
     }
 
-    let krate = path.components().nth_back(1).ok_or("No crate folder found")?.as_os_str();
-
-    write_green("Checking ", format!("{}...", krate.to_string_lossy()))?;
+    let dirname =
+        path.components().nth_back(1).ok_or("No crate folder found")?.as_os_str();
+    write_green("Checking ", format!("{}...", dirname.to_string_lossy()))?;
 
     let toml_raw = read_to_string(&path)
         .map_err(|_| format!("No file found at: {}", path.display()))?;
@@ -175,7 +177,7 @@ fn check_toml(path: &str, args: &Args, config: &Config) -> IoResult<bool> {
         if !is_sorted {
             write_red(
                 "error: ",
-                format!("Dependencies for {} are not sorted", krate.to_string_lossy()),
+                format!("Dependencies for {} are not sorted", dirname.to_string_lossy()),
             )?;
         }
 
@@ -185,7 +187,7 @@ fn check_toml(path: &str, args: &Args, config: &Config) -> IoResult<bool> {
     write_file(&path, &sorted_str)?;
     write_green(
         "Finished: ",
-        format!("Cargo.toml for {:?} has been rewritten", krate.to_string_lossy()),
+        format!("Cargo.toml for {:?} has been rewritten", dirname.to_string_lossy()),
     )?;
 
     Ok(true)

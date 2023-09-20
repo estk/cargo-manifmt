@@ -2,6 +2,8 @@
 use std::fs;
 
 use super::Matcher;
+use pretty_assertions::assert_eq;
+use pretty_assertions::assert_ne;
 
 const MATCHER: Matcher<'_> = Matcher {
     heading: &["dependencies", "dev-dependencies", "build-dependencies"],
@@ -54,7 +56,8 @@ fn sort_devfirst() {
     #[cfg(target_os = "windows")]
     assert_eq!(input.replace("\r\n", "\n"), sorted.to_string().replace("\r\n", "\n"));
     #[cfg(not(target_os = "windows"))]
-    assert_eq!(input, sorted.to_string());
+    let sorted = sorted.to_string();
+    assert_eq!(input, sorted, "\nNot Equal\n{input}\n\n{sorted}");
     // println!("{}", sorted.to_string_in_original_order());
 
     let input = fs::read_to_string("examp/noreorder.toml").unwrap();
@@ -89,5 +92,4 @@ fn workspace_dependencies_check() {
     let input = fs::read_to_string("examp/workspace_dep.toml").unwrap();
     let sorted = super::sort_toml(&input, MATCHER, false, &[]);
     assert_ne!(input, sorted.to_string());
-    println!("{}", sorted.to_string());
 }
