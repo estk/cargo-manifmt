@@ -1,4 +1,4 @@
-# Cargo Sort
+# Cargo Manifmt
 
 [![Rust Stable](https://github.com/DevinR528/cargo-sort-ck/actions/workflows/stable.yml/badge.svg)](https://github.com/DevinR528/cargo-sort-ck/actions/workflows/stable.yml)
 
