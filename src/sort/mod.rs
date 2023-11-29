@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, collections::BTreeMap, iter::FromIterator};
 
-use toml_edit::{Array, Document, Item, RawString, Table, TableLike, Value};
+use toml_edit::{Array, Document, Item, Table, TableLike, Value};
 
 mod test;
 
@@ -139,15 +139,9 @@ fn sort_array(arr: &mut Array) {
 fn is_ws_dep(t: &dyn TableLike) -> bool {
     t.get("workspace").and_then(|ws| ws.as_bool()).is_some()
 }
-fn is_onekey(t: &dyn TableLike) -> bool {
-    t.len() == 1
-}
-fn is_git(t: &dyn TableLike) -> bool {
-    t.contains_key("git")
-}
-fn is_path(t: &dyn TableLike) -> bool {
-    t.contains_key("path")
-}
+fn is_onekey(t: &dyn TableLike) -> bool { t.len() == 1 }
+fn is_git(t: &dyn TableLike) -> bool { t.contains_key("git") }
+fn is_path(t: &dyn TableLike) -> bool { t.contains_key("path") }
 
 /// Returns a sorted toml `Document`.
 pub fn sort_toml(
@@ -347,12 +341,7 @@ fn sort_deps(table: &mut Table) {
         grouped_and_sorted_items.collect()
     };
 
-    // todo: make extra newline configurable
-    let mut first = true;
     for group in groups {
-        let mut group_start = true && !first;
-        first = false;
-
         for k in group {
             let Some(orig_decor) = table.key_decor(&k).map(ToOwned::to_owned) else {
                 tracing::warn!("Unable to find key decor for {k} in table");
@@ -379,34 +368,16 @@ fn sort_deps(table: &mut Table) {
             table.insert(&k, v);
             let d = table.key_decor_mut(&k).unwrap();
 
-            let pfx =
-                decorate_pfx(orig_decor.prefix().and_then(|x| x.as_str()), group_start);
-            d.set_prefix(pfx.to_owned());
+            if let Some(pfx) = orig_decor.prefix() {
+                d.set_prefix(pfx.to_owned())
+            }
 
             if let Some(od) = orig_decor.suffix() {
                 if !dotted {
                     d.set_suffix(od.to_owned())
                 }
             }
-            group_start = false;
         }
-    }
-}
-
-/// Group starts get newline separated
-fn decorate_pfx(pfx: Option<&str>, group_start: bool) -> RawString {
-    let Some(pfx) = pfx else {
-        if group_start {
-            return "\n".into();
-        } else {
-            return "".into();
-        }
-    };
-    let trimmed = pfx.trim_start_matches('\n');
-    if group_start {
-        format!("\n{trimmed}").into()
-    } else {
-        trimmed.into()
     }
 }
 
@@ -432,11 +403,7 @@ impl DepMeta {
             } else if is_path(t) {
                 Self::Path
             } else if is_ws_dep(t) {
-                if is_onekey(t) {
-                    Self::WsOneKey
-                } else {
-                    Self::Ws
-                }
+                if is_onekey(t) { Self::WsOneKey } else { Self::Ws }
             } else {
                 Self::NormalTable
             }

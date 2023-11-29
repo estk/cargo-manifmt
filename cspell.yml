@@ -1,0 +1,52 @@
+allowCompoundWords: true
+ignoreRegExpList:
+  - username
+
+languageSettings:
+  - languageId: rust
+    ignoreRegExpList:
+      - rust-string_binary
+      - rust-string_raw
+      - rust-string
+patterns:
+  - name: rust-string
+    pattern: /(")[^\1]*?\1/g
+  - name: rust-string-binary
+    pattern: /\bbr?(").*?\1/gi
+  - name: rust-string-raw
+    pattern: /\bu?r#(").*?\1#/gi
+  - name: username
+    pattern: /@[a-z]+/gi
+    # pattern: /@[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*/i
+dictionaries:
+  - rust
+  - cpp
+  - c
+  - bash
+  - python
+  - git
+ignorePaths:
+  - Cargo.lock
+  - target
+  - fixtures
+minWordLength: 5
+userWords:
+  - fmtstr
+  - schemars
+  - thiserror
+  - strat
+  - stabilized
+  - unseparated
+  - rustc
+  - taiki
+  - tomlfmt
+  - devinr
+  - fooer
+  - Tolnay
+  - docsrs
+  - actix
+  - taplo
+  - argonautica
+  - Andronik
+  - buildx
+  - dtolnay

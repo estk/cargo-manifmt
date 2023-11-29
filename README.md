@@ -1,5 +1,19 @@
 # Cargo Manifmt
 
+## Todo
+
+- [ ] retain no crlf
+- [ ] table rewrite should happen in a single point
+eg: foo gets sorted but then reordered after the fact, we ideally should just output the
+ ordering/groups and then later on when we actually apply the ordering, we do it all in one go.
+
+```toml
+[dependencies]
+zoo = "1"
+[dependencies.foo]
+v = "1"
+```
+
 [![Rust Stable](https://github.com/DevinR528/cargo-sort-ck/actions/workflows/stable.yml/badge.svg)](https://github.com/DevinR528/cargo-sort-ck/actions/workflows/stable.yml)
 
 A tool to check that your Cargo.toml dependencies are sorted alphabetically. Project created as a solution to @dtolnay's [request for implementation #29](https://github.com/dtolnay/request-for-implementation/issues/29). Cross platform implementation, windows compatible.  Terminal coloring works on both cmd.exe and powershell. Checks/sorts by key in tables and also nested table headers (does not sort the items in a nested header, sorts the table itself). `cargo sort` uses [toml-edit](https://github.com/ordian/toml_edit) to parse the toml file into something useful.
@@ -88,7 +102,7 @@ be updated to the latest version.
 
 # Run
 
-Thanks to [dspicher](https://github.com/dspicher) for [issue #4](https://github.com/DevinR528/cargo-sort-ck/issues/4) you can now invoke `cargo sort` check as a cargo subcommand
+Thanks to [@dspicher](https://github.com/dspicher) for [issue #4](https://github.com/DevinR528/cargo-sort-ck/issues/4) you can now invoke `cargo sort` check as a cargo subcommand
 
 ```bash
 cargo sort [FLAGS] [path]

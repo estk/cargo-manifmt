@@ -2,9 +2,14 @@ name: Docker Automated Builds
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches: [never]
+
+# Currently abandoned
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     branches: [main]
 
 jobs:
   docker:

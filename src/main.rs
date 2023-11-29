@@ -32,7 +32,8 @@ struct Args {
     #[arg(short, long)]
     workspace: bool,
 
-    /// List the order tables should be written out (--order package,dependencies,features)
+    /// List the order tables should be written out (--order
+    /// package,dependencies,features)
     #[arg(short, long)]
     order: Option<Vec<String>>,
 }
@@ -72,11 +73,7 @@ fn run() -> IoResult<()> {
         member_paths.iter().map(|path| check_toml(path, &args, &config)).collect();
     let all_sorted = members_sorted?.iter().all(|x| *x);
 
-    if all_sorted {
-        std::process::exit(0)
-    } else {
-        std::process::exit(1)
-    }
+    if all_sorted { std::process::exit(0) } else { std::process::exit(1) }
 }
 
 fn find_members(dir: String) -> IoResult<Vec<String>> {
@@ -91,10 +88,8 @@ fn find_members(dir: String) -> IoResult<Vec<String>> {
         .map_err(|_| format!("no file found at: {}", path.display()))?;
 
     let toml = raw_toml.parse::<Document>()?;
-    let workspace = toml
-        .get("workspace")
-        .ok_or("Unable to get workspace root. Are you running from the workspace dir?")?;
-    if let Item::Table(ws) = workspace {
+
+    if let Some(Item::Table(ws)) = toml.get("workspace") {
         // The workspace excludes, used to filter members by
         let excludes: Vec<&str> = ws
             .get("exclude")

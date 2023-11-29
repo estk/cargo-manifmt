@@ -77,13 +77,9 @@ pub struct Config {
     pub workspace_dependency_grouping: Option<WSDependencyGrouping>,
 }
 
-fn default_as_true() -> bool {
-    true
-}
+fn default_as_true() -> bool { true }
 
-fn default_as_one() -> usize {
-    1
-}
+fn default_as_one() -> usize { 1 }
 
 const DEFAULT_TABLE_ORDER: &[&str] = &[
     "package",
@@ -96,22 +92,19 @@ const DEFAULT_TABLE_ORDER: &[&str] = &[
 ];
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum WSDependencyGrouping {
     Top,
     Bottom,
 }
 
 impl Config {
-    pub fn serde_default() -> Self {
-        toml::from_str("").unwrap()
-    }
+    pub fn serde_default() -> Self { toml::from_str("").unwrap() }
     fn default_table_order() -> Vec<String> {
         DEFAULT_TABLE_ORDER.iter().map(ToString::to_string).collect()
     }
 
     // Used in testing and fuzzing
     #[allow(dead_code)]
-    pub(crate) fn new() -> Self {
-        toml::from_str("").unwrap()
-    }
+    pub(crate) fn new() -> Self { toml::from_str("").unwrap() }
 }

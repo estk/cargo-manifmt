@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [2.0.0-rc3]
+
+* Disable docker ci
+* Rewrite ci
+* Remove newline sep groups, back to drawing board
+
 ## [2.0.0-rc2]
 
 ### Changed
@@ -39,11 +45,12 @@
 
 ### Added
 
+@matze
   *  Add --check-format flag
     * If set, `cargo-sort` will check formatting (allows only checking formatting)
-    * [Thanks matze](https://github.com/DevinR528/cargo-sort/pull/41)
+    * [Thanks @matze](https://github.com/DevinR528/cargo-sort/pull/41)
   * DockerHub builds added
-    * [Thanks orhun](https://github.com/DevinR528/cargo-sort/pull/44)
+    * [Thanks @orhun](https://github.com/DevinR528/cargo-sort/pull/44)
 
 
 
@@ -52,7 +59,7 @@
 ### Fixed
 
   * Fix leaving files in the list of paths to check when `--workspace` is used with globs
-    * [Thanks innuwa](https://github.com/DevinR528/cargo-sort/issues/33)
+    * [Thanks @innuwa](https://github.com/DevinR528/cargo-sort/issues/33)
   * Fix the cargo install always re-installing https://github.com/rust-lang/cargo/issues/8703
 
 ## [1.0.6]

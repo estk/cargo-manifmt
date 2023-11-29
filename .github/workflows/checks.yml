@@ -1,0 +1,73 @@
+name: Code checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'feature-**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+          - nightly-2023-10-25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: streetsidesoftware/cspell-action@v5
+      - uses: cargo-bins/cargo-binstall@main
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: "clippy, rustfmt"
+
+      - name: Info
+        run: |
+          rustc --version
+          cargo --version --verbose
+          cargo clippy --version
+          cargo fmt --version
+
+      - name: Lint
+        run: |
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+          cargo install --path .
+          cargo manifmt --check
+
+  cargo:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+          - beta
+          - nightly
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - uses: taiki-e/install-action@nextest
+
+      - name: Info
+        run: |
+          cargo --version --verbose
+          rustc --version
+
+      - name: Test
+        run: |
+          cargo check
+          cargo nextest run --all
+
+      - name: Build
+        run: |
+          cargo build --release
