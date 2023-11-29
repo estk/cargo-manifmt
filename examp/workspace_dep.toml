@@ -5,6 +5,10 @@ baz.version = "1.0"
 zulu.workspace = true
 alpha.workspace = false
 bas.workspace = false
+
+
+# a special deps
+branched-dep = { git = "https://branched.rs", branch = "foobar" }
 fooer.git = "https://foobar.com/fooer.git"
+bast = { workspace = true }                                       # onekey
 charles.path = "./charles"
-bast = { workspace = true }

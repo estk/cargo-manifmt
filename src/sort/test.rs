@@ -91,5 +91,6 @@ fn reorder() {
 fn workspace_dependencies_check() {
     let input = fs::read_to_string("examp/workspace_dep.toml").unwrap();
     let sorted = super::sort_toml(&input, MATCHER, false, &[]);
+    println!("{}", sorted.to_string());
     assert_ne!(input, sorted.to_string());
 }

@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, collections::BTreeMap, iter::FromIterator};
 
-use toml_edit::{Array, Document, Item, Table, Value};
+use toml_edit::{Array, Document, Item, RawString, Table, TableLike, Value};
 
 mod test;
 
@@ -136,20 +136,17 @@ fn sort_array(arr: &mut Array) {
     }
 }
 /// check if the dependency value indicates that it is a workspace dep
-fn is_ws_dep(item: &Item) -> bool {
-    item.as_table_like()
-        .and_then(|t| t.get("workspace"))
-        .and_then(|ws| ws.as_bool())
-        .unwrap_or_default()
+fn is_ws_dep(t: &dyn TableLike) -> bool {
+    t.get("workspace").and_then(|ws| ws.as_bool()).is_some()
 }
-fn is_onekey(item: &Item) -> bool {
-    item.as_table_like().map(|t| t.len() == 1).unwrap_or_default()
+fn is_onekey(t: &dyn TableLike) -> bool {
+    t.len() == 1
 }
-fn is_git(item: &Item) -> bool {
-    item.as_table_like().map(|t| t.contains_key("git")).unwrap_or_default()
+fn is_git(t: &dyn TableLike) -> bool {
+    t.contains_key("git")
 }
-fn is_path(item: &Item) -> bool {
-    item.as_table_like().map(|t| t.contains_key("path")).unwrap_or_default()
+fn is_path(t: &dyn TableLike) -> bool {
+    t.contains_key("path")
 }
 
 /// Returns a sorted toml `Document`.
@@ -331,60 +328,120 @@ pub(crate) fn count_blank_lines(decor: &toml_edit::Decor) -> usize {
 fn sort_deps(table: &mut Table) {
     use itertools::Itertools;
 
-    let gb = table.iter().group_by(DepKind::from_entry);
-    let sorted_groups = gb
-        .into_iter()
-        .into_group_map()
-        .into_iter()
-        .sorted_by(|(k1, _g1), (k2, _g2)| k1.cmp(k2));
+    let groups: Vec<Vec<String>> = {
+        // iterator of meta & key
+        let key_meta = table.iter().map(|e| (DepMeta::from_entry(&e), e.0));
 
-    let mut res = vec![];
-    for (_, g) in sorted_groups {
-        let mut full_group = vec![];
-        for gg in g {
-            full_group.extend(gg.into_iter().map(|x| x.0.to_string()))
-        }
-        full_group.sort();
-        res.append(&mut full_group);
-    }
-    drop(gb);
+        // sorted iter of meta & key (group_by only works when pre-sorted)
+        let sorted_by_meta = key_meta.sorted_by_key(|(m, _s)| *m);
 
-    for k in res {
-        let decor = table.key_decor(&k).unwrap().to_owned();
-        let (k, v) = table.remove_entry(&k).unwrap();
-        table.insert(&k, v);
-        let d = table.key_decor_mut(&k).unwrap();
-        if let Some(x) = decor.prefix() {
-            d.set_prefix(x.to_owned())
-        }
-        if let Some(x) = decor.suffix() {
-            d.set_suffix(x.to_owned())
+        // grouped by meta
+        let grouped_by_meta = sorted_by_meta.group_by(|(m, _k)| *m);
+
+        // sort the items in each group, lexically
+        let grouped_and_sorted_items = grouped_by_meta.into_iter().map(|(_, group)| {
+            let iter = group.map(|(_m, k)| k.to_string()).sorted();
+            iter.collect_vec()
+        });
+
+        grouped_and_sorted_items.collect()
+    };
+
+    // todo: make extra newline configurable
+    let mut first = true;
+    for group in groups {
+        let mut group_start = true && !first;
+        first = false;
+
+        for k in group {
+            let Some(orig_decor) = table.key_decor(&k).map(ToOwned::to_owned) else {
+                tracing::warn!("Unable to find key decor for {k} in table");
+                continue;
+            };
+            let Some((k, mut v)) = table.remove_entry(&k) else {
+                tracing::warn!("Unable to find entry for {k} in table");
+                continue;
+            };
+            // todo: factor this somewhere else
+            // transform single key tables to inline tables
+            let mut dotted = false;
+            if let Some(t) = v.as_inline_table_mut() {
+                dotted = true;
+                t.decor_mut().clear();
+                // avoid any extra spaces from when it was a normal table
+                for (mut k, _) in t.iter_mut() {
+                    k.decor_mut().clear();
+                }
+                if t.len() == 1 {
+                    t.set_dotted(true);
+                }
+            }
+            table.insert(&k, v);
+            let d = table.key_decor_mut(&k).unwrap();
+
+            let pfx =
+                decorate_pfx(orig_decor.prefix().and_then(|x| x.as_str()), group_start);
+            d.set_prefix(pfx.to_owned());
+
+            if let Some(od) = orig_decor.suffix() {
+                if !dotted {
+                    d.set_suffix(od.to_owned())
+                }
+            }
+            group_start = false;
         }
     }
 }
 
-#[derive(PartialEq, Eq, Debug, PartialOrd, Ord, Hash)]
-enum DepKind {
+/// Group starts get newline separated
+fn decorate_pfx(pfx: Option<&str>, group_start: bool) -> RawString {
+    let Some(pfx) = pfx else {
+        if group_start {
+            return "\n".into();
+        } else {
+            return "".into();
+        }
+    };
+    let trimmed = pfx.trim_start_matches('\n');
+    if group_start {
+        format!("\n{trimmed}").into()
+    } else {
+        trimmed.into()
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, PartialOrd, Ord, Hash, Copy, Clone)]
+enum DepMeta {
     Path,
     Git,
-    Normal,
+    NormalTable,
+    Other,
+    String,
     Ws,
     WsOneKey,
 }
-impl DepKind {
+impl DepMeta {
     fn from_entry((_, i): &(&str, &Item)) -> Self {
-        if is_git(i) {
-            Self::Git
-        } else if is_path(i) {
-            Self::Path
-        } else if is_ws_dep(i) {
-            if is_onekey(i) {
-                Self::WsOneKey
+        if matches!(i, Item::Value(Value::String(_))) {
+            return Self::String;
+        }
+
+        if let Some(t) = i.as_table_like() {
+            if is_git(t) {
+                Self::Git
+            } else if is_path(t) {
+                Self::Path
+            } else if is_ws_dep(t) {
+                if is_onekey(t) {
+                    Self::WsOneKey
+                } else {
+                    Self::Ws
+                }
             } else {
-                Self::Ws
+                Self::NormalTable
             }
         } else {
-            DepKind::Normal
+            Self::Other
         }
     }
 }
