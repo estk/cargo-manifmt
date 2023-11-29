@@ -46,7 +46,7 @@ fn main() {
 
 fn run() -> IoResult<()> {
     let raw_args = std::env::args_os();
-    let filtered_args = raw_args.filter(|x| x != "sort");
+    let filtered_args = raw_args.filter(|x| x != "manifmt");
 
     let args: Args = Parser::parse_from(filtered_args);
     let cwd =

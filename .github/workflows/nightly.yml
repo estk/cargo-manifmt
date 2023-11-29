@@ -28,4 +28,4 @@ jobs:
       with:
         command: mean-clippy
     - name: Sort Cargo.toml
-      run: cargo install cargo-sort && cargo sort -gc
+      run: cargo install cargo-manifmt && cargo sort -gc

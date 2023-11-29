@@ -1,6 +1,6 @@
 [package]
 name = "cargo-manifmt"
-version = "2.0.1"
+version = "2.0.0-rc2"
 authors = [
     "Devin R <devin.ragotzy@gmail.com>",
     "Andronik Ordian <write@reusable.software>",
@@ -8,13 +8,13 @@ authors = [
 ]
 license = "MIT/Apache-2.0"
 description = "Check if tables and items in a .toml file are lexically sorted"
-repository = "https://github.com/DevinR528/cargo-sort"
+repository = "https://github.com/estk/cargo-manifmt"
 keywords = ["cargo", "subcommand", "dependencies", "sort", "check"]
 categories = ["development-tools::cargo-plugins", "development-tools"]
 edition = "2018"
 readme = "README.md"
 exclude = ["examp", "fixtures"]
-default-run = "cargo-sort"
+default-run = "cargo-manifmt"
 
 # [features]
 # fuzz = ["afl"]
